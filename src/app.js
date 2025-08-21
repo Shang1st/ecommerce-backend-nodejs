@@ -9,17 +9,30 @@ const app = express()
 app.use(morgan("dev"))
 app.use(helmet())
 app.use(compression())
+app.use(express.json())
+app.use(express.urlencoded({
+    extended: true
+}))
 
 // int db
 require('./dbs/init.mongodb')
 
 // int routes
-app.get('/', (req, res, next) => {
-    const strCompress = 'Hello Fan!'
-    return res.status(200).json({
-        message: 'Welcome Fans!',
-        // metadata: strCompress.repeat(100000)
-    })
+app.use('/', require('./routes'))
+
+// handling error
+app.use((req, res, next) => {
+    const error = new Error('Not Found')
+    error.status = 404
+    next(error)
 })
 
+app.use((error, req, res, next) => {
+    const statusCode = error.status || 500
+    return res.status(statusCode).json({
+        status: 'error',
+        code: statusCode,
+        message: error.message || 'Internal Server Error'
+    })
+})
 module.exports = app
