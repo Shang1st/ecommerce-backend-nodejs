@@ -9,6 +9,7 @@ const { getInfoData } = require("../utils")
 const { ceil } = require("lodash")
 const { BadRequestError, AuthFailureError, ForbiddenError } = require("../core/error.response")
 const { findByEmail } = require("./shop.service")
+const { ref } = require("node:process")
 
 const RoleShop = {
     SHOP: 'SHOP',
@@ -19,7 +20,36 @@ const RoleShop = {
 
 class AccessService {
 
-    
+        static handlerRefreshTokenV2 = async ( { keyStore, user, refreshToken } ) => {
+            console.log(user);
+            const { userId, email } = user;
+
+            if(keyStore.refreshTokensUsed.includes(refreshToken)){
+                await KeyTokenService.deleteKeyById(userId)
+                throw new ForbiddenError(' Something wrong happend !! Pls relogin')
+            }
+
+            if(keyStore.refreshToken !== refreshToken) throw AuthFailureError('Shop not registeted')
+                
+            const foundShop = await findByEmail( { email })
+            if(!foundShop) throw new AuthFailureError(' Shop not registeted 2')
+            // create 1 cap moi
+            const tokens = await createTokenPair({ userId, email }, keyStore.publicKey, keyStore.privateKey)
+            //update token
+            await keyStore.update({
+                $set: {
+                    refreshToken: tokens.refreshToken
+                },
+                $addToSet: {
+                    refreshTokensUsed: ref // da duoc su dung de lay token moi roi
+                }
+            })
+
+        return {
+            user,
+            tokens
+        }
+    }
 
     static handlerRefreshToken = async ( refreshToken ) => {
 
@@ -81,8 +111,10 @@ class AccessService {
     */
     static login  = async( { email, password, refreshToken = null}) => {
         //.1
+        console.log(email);
         const foundShop = await findByEmail(email)
         if(!foundShop) throw new BadRequestError('Shop not registered')
+        console.log('da di den day');
         //.2
         const match = bcrypt.compare(password, foundShop.password)
         if(!match) throw new AuthFailureError('Authentication error')
